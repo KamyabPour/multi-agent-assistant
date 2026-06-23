@@ -32,3 +32,17 @@ class AgentResult(BaseModel):
 class ChatResponse(BaseModel):
     route: AgentType
     result: AgentResult
+
+
+class EmailTestRequest(BaseModel):
+    to_email: str = Field(..., min_length=5)
+    subject: str = Field(default="Multi-Agent Assistant Test Email", min_length=1)
+    body: str = Field(
+        default="This is a test email from multi-agent-assistant Gmail integration.",
+        min_length=1,
+    )
+
+
+class EmailTestResponse(BaseModel):
+    success: bool
+    message: str

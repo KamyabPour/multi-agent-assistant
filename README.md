@@ -26,6 +26,13 @@ multi-agent-assistant/
 
 ## Quick Start
 
+## 0) Gmail setup for assistant identity
+
+Before running apps, configure a dedicated assistant Gmail account and app password.
+
+- Setup guide: docs/gmail_setup.md
+- This is required for assistant email features and notification workflows.
+
 ## 1) Backend
 
 ```powershell
@@ -41,6 +48,9 @@ Health check:
 
 Chat endpoint:
 - POST http://localhost:8000/api/v1/chat
+
+Email integration test endpoint:
+- POST http://localhost:8000/api/v1/email/send-test
 
 Example body:
 ```json
