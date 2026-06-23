@@ -1,0 +1,13 @@
+{
+  "name": "multi-agent-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "web:dev": "npm run dev --workspace apps/web",
+    "mobile:start": "npm run start --workspace apps/mobile"
+  }
+}

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+apps/*/node_modules/
+
+# Env and secrets
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+.vscode/*.code-workspace
