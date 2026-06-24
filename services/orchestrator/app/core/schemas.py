@@ -46,3 +46,18 @@ class EmailTestRequest(BaseModel):
 class EmailTestResponse(BaseModel):
     success: bool
     message: str
+
+
+class UpdateAssistantProfileRequest(BaseModel):
+    email: str | None = None
+    skills: list[dict] | None = None
+    instructions: str | None = None
+    guardrails: list[str] | None = None
+
+
+class UpdateBossProfileRequest(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    goals: list[str] | None = None
+    constraints: list[str] | None = None
+    summary: str | None = None
