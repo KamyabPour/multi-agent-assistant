@@ -305,6 +305,15 @@ class ComplianceAgent(BaseAgent):
                 priority="high",
             ),
             AgentAction(
+                title="Review PDF export",
+                details=(
+                    f"Open: {run_result['pdf_path']}"
+                    if run_result.get("pdf_generated")
+                    else "PDF export skipped (reportlab not installed)."
+                ),
+                priority="medium",
+            ),
+            AgentAction(
                 title="Validate source captures",
                 details=(
                     f"Downloaded {run_result['download_count']} source files to "
@@ -380,6 +389,12 @@ class ComplianceAgent(BaseAgent):
         source_urls = list(parsed["urls"])
         context_urls = context.get("source_urls") or []
         source_urls.extend([u for u in context_urls if isinstance(u, str)])
+        source_urls.extend(
+            self._country_specific_sources(
+                parsed["origin_country"],
+                parsed["destination_country"],
+            )
+        )
         source_urls.extend(self._default_global_sources())
         source_urls = self._dedupe_urls(source_urls)
 
@@ -401,6 +416,9 @@ class ComplianceAgent(BaseAgent):
         )
         report_path.write_text(report_text, encoding="utf-8")
 
+        pdf_path = shared_folder / report_name.replace(".md", ".pdf")
+        pdf_generated = self._export_pdf_report(report_text, pdf_path)
+
         summary = (
             f"Compliance report created for {parsed['origin_country']} -> "
             f"{parsed['destination_country']} and saved to {report_path}."
@@ -414,6 +432,8 @@ class ComplianceAgent(BaseAgent):
             "destination_country": parsed["destination_country"],
             "business_summary": parsed["business_summary"],
             "downloaded_sources": downloaded_sources,
+            "pdf_path": str(pdf_path),
+            "pdf_generated": pdf_generated,
         }
 
     def _parse_business_markdown(self, text: str) -> dict:
@@ -451,6 +471,54 @@ class ComplianceAgent(BaseAgent):
             "https://www.sanctionsmap.eu/#/main",
             "https://www.worldbank.org/en/topic/trade",
         ]
+
+    def _country_specific_sources(self, origin_country: str, destination_country: str) -> list[str]:
+        source_map = {
+            "australia": [
+                "https://www.abf.gov.au/importing-exporting-and-manufacturing",
+                "https://www.austrade.gov.au/en/how-we-can-help-you/export-services",
+                "https://www.accc.gov.au/business",
+            ],
+            "vietnam": [
+                "https://www.customs.gov.vn/index.jsp?pageId=2311&cid=4201",
+                "https://moit.gov.vn/en",
+            ],
+            "united states": [
+                "https://www.cbp.gov/trade",
+                "https://www.bis.gov/export-controls",
+                "https://home.treasury.gov/policy-issues/office-of-foreign-assets-control-sanctions-programs-and-information",
+            ],
+            "singapore": [
+                "https://www.customs.gov.sg/businesses/importing-goods",
+                "https://www.enterprisesg.gov.sg/",
+            ],
+            "united kingdom": [
+                "https://www.gov.uk/topic/business-tax/import-export",
+            ],
+            "canada": [
+                "https://www.cbsa-asfc.gc.ca/import/menu-eng.html",
+                "https://www.international.gc.ca/trade-commerce/index.aspx?lang=eng",
+            ],
+        }
+
+        urls = []
+        for country in [origin_country, destination_country]:
+            norm = self._normalize_country(country)
+            urls.extend(source_map.get(norm, []))
+        return urls
+
+    def _normalize_country(self, country: str) -> str:
+        norm = (country or "").strip().lower()
+        aliases = {
+            "usa": "united states",
+            "us": "united states",
+            "u.s.": "united states",
+            "u.s.a.": "united states",
+            "uk": "united kingdom",
+            "u.k.": "united kingdom",
+            "viet nam": "vietnam",
+        }
+        return aliases.get(norm, norm)
 
     def _dedupe_urls(self, urls: list[str]) -> list[str]:
         seen = set()
@@ -493,6 +561,8 @@ class ComplianceAgent(BaseAgent):
         report_generated_at: str,
         business_file: str,
     ) -> str:
+        risk_items = self._risk_assessment(parsed)
+
         lines = [
             "# Cross-Border Compliance Report",
             "",
@@ -522,6 +592,15 @@ class ComplianceAgent(BaseAgent):
         else:
             lines.append("- No files downloaded. Check connectivity and source URLs.")
 
+        lines.extend(["", "## Risk Scoring"])
+        if risk_items:
+            for item in risk_items:
+                lines.append(
+                    f"- [{item['risk'].upper()}] {item['area']}: {item['reason']}"
+                )
+        else:
+            lines.append("- [MEDIUM] General compliance baseline applies.")
+
         lines.extend(
             [
                 "",
@@ -545,3 +624,89 @@ class ComplianceAgent(BaseAgent):
         )
 
         return "\n".join(lines) + "\n"
+
+    def _risk_assessment(self, parsed: dict) -> list[dict]:
+        summary = (parsed.get("business_summary") or "").lower()
+        items: list[dict] = []
+
+        keyword_rules = [
+            (
+                ["medical", "pharma", "drug", "therapeutic", "device"],
+                "Product approvals and safety certification",
+                "high",
+                "Regulated health-related products usually require strict approvals in both countries.",
+            ),
+            (
+                ["food", "beverage", "supplement", "agri"],
+                "Food and labeling compliance",
+                "high",
+                "Food imports and consumer labeling often have strict legal requirements.",
+            ),
+            (
+                ["finance", "fintech", "payment", "bank", "insurance", "crypto"],
+                "Financial licensing and AML/KYC",
+                "high",
+                "Financial services often trigger licensing and anti-money-laundering obligations.",
+            ),
+            (
+                ["data", "ai", "software", "saas", "cloud", "platform"],
+                "Data protection and cybersecurity",
+                "medium",
+                "Digital services may trigger privacy, cross-border data transfer, and cyber rules.",
+            ),
+            (
+                ["hardware", "electronics", "robot", "sensor", "iot", "telecom"],
+                "Import controls and technical standards",
+                "medium",
+                "Physical goods may need customs classification and technical conformity checks.",
+            ),
+        ]
+
+        for keywords, area, risk, reason in keyword_rules:
+            if any(k in summary for k in keywords):
+                items.append({"area": area, "risk": risk, "reason": reason})
+
+        if not items:
+            items.append(
+                {
+                    "area": "General cross-border operations",
+                    "risk": "medium",
+                    "reason": "No high-risk keywords detected, but baseline trade and tax checks remain required.",
+                }
+            )
+
+        return items
+
+    def _export_pdf_report(self, markdown_text: str, pdf_path: Path) -> bool:
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+            from xml.sax.saxutils import escape
+        except Exception:
+            return False
+
+        lines = [line.rstrip() for line in markdown_text.splitlines()]
+        styles = getSampleStyleSheet()
+        story = []
+
+        for line in lines:
+            if not line.strip():
+                story.append(Spacer(1, 8))
+                continue
+            safe = escape(line)
+            if line.startswith("# "):
+                story.append(Paragraph(safe[2:].strip(), styles["Heading1"]))
+            elif line.startswith("## "):
+                story.append(Paragraph(safe[3:].strip(), styles["Heading2"]))
+            elif line.startswith("- "):
+                story.append(Paragraph(f"• {safe[2:].strip()}", styles["BodyText"]))
+            else:
+                story.append(Paragraph(safe, styles["BodyText"]))
+
+        try:
+            doc = SimpleDocTemplate(str(pdf_path), pagesize=A4)
+            doc.build(story)
+            return True
+        except Exception:
+            return False
