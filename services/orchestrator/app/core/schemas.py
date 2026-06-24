@@ -22,6 +22,7 @@ class AgentAction(BaseModel):
     title: str
     details: str
     priority: str = "medium"
+    download_url: str | None = None
 
 
 class AgentResult(BaseModel):

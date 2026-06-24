@@ -61,20 +61,69 @@ if errorlevel 1 (
 ) else (
     echo pip: Found
 )
+
+where node >nul 2>&1
+if errorlevel 1 (
+    echo WARNING: Node.js not found. Install Node.js 18+ from nodejs.org
+) else (
+    echo Node.js: Found
+)
+
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo WARNING: npm not found. Install Node.js/npm toolchain.
+) else (
+    echo npm: Found
+)
 echo.
 
-REM Install backend dependencies
-echo [3] Installing Python dependencies...
-pip install -q playwright
+REM Install backend dependencies in isolated virtualenv
+echo [3] Installing backend Python dependencies in services\orchestrator\.venv...
 cd services\orchestrator
-pip install -q -e ".[dev]"
+if not exist .venv (
+    python -m venv .venv
+    if errorlevel 1 (
+        echo ERROR: Failed to create Python virtual environment.
+        pause
+        exit /b 1
+    )
+)
+
+set "VENV_PY=.venv\Scripts\python.exe"
+"%VENV_PY%" -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 (
-    echo ERROR: Failed to install dependencies
+    echo ERROR: Failed to upgrade pip toolchain.
     pause
     exit /b 1
 )
-echo Python dependencies installed.
+
+"%VENV_PY%" -m pip install --upgrade -e ".[dev]"
+if errorlevel 1 (
+    echo ERROR: Failed to install backend dependencies.
+    pause
+    exit /b 1
+)
+
+"%VENV_PY%" -m pip install --upgrade playwright
+if errorlevel 1 (
+    echo ERROR: Failed to install playwright.
+    pause
+    exit /b 1
+)
+
+echo Backend Python dependencies installed.
 cd ..\..
+echo.
+
+REM Install frontend workspace dependencies
+echo [3b] Installing Node.js workspace dependencies...
+npm install
+if errorlevel 1 (
+    echo ERROR: Failed to install Node.js workspace dependencies.
+    pause
+    exit /b 1
+)
+echo Node.js dependencies installed.
 echo.
 
 REM STEP 4 - Gmail first (needed before GitHub so same email is reused)
@@ -252,7 +301,7 @@ echo Install is done ONCE. To run the app each time:
 echo.
 echo Terminal 1 - Backend:
 echo    cd services\orchestrator
-echo    python -m uvicorn app.main:app --reload
+echo    .venv\Scripts\python -m uvicorn app.main:app --reload
 echo.
 echo Terminal 2 - Web frontend:
 echo    cd apps\web

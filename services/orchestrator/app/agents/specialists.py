@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -313,15 +314,27 @@ class ComplianceAgent(BaseAgent):
                 ),
                 priority="medium",
             ),
-            AgentAction(
-                title="Validate source captures",
-                details=(
-                    f"Downloaded {run_result['download_count']} source files to "
-                    f"{run_result['downloads_dir']}"
-                ),
-                priority="medium",
-            ),
         ]
+
+        if run_result.get("resources_archive_path"):
+            actions.append(
+                AgentAction(
+                    title="Download collected resources",
+                    details=f"Open: {run_result['resources_archive_path']}",
+                    priority="medium",
+                )
+            )
+        else:
+            actions.append(
+                AgentAction(
+                    title="Validate source captures",
+                    details=(
+                        f"Downloaded {run_result['download_count']} source files to "
+                        f"{run_result['downloads_dir']}"
+                    ),
+                    priority="medium",
+                )
+            )
 
         if self.brain:
             try:
@@ -376,14 +389,20 @@ class ComplianceAgent(BaseAgent):
             md_path = shared_folder / business_file
         else:
             md_files = sorted(shared_folder.glob("*.md"))
-            if not md_files:
-                raise ValueError("No markdown files found in shared folder.")
-            md_path = md_files[0]
+            txt_files = sorted(shared_folder.glob("*.txt"))
+            candidate_files = md_files + txt_files
+            if not candidate_files:
+                raise ValueError("No .md or .txt files found in shared folder.")
+            md_path = candidate_files[0]
+
+        if not md_path.exists() or not md_path.is_file():
+            raise ValueError(f"Business file not found: {md_path}")
 
         raw_text = md_path.read_text(encoding="utf-8", errors="ignore")
         parsed = self._parse_business_markdown(raw_text)
 
-        downloads_dir = shared_folder / "compliance_downloads"
+        report_folder = md_path.parent
+        downloads_dir = report_folder / "compliance_downloads"
         downloads_dir.mkdir(exist_ok=True)
 
         source_urls = list(parsed["urls"])
@@ -404,20 +423,35 @@ class ComplianceAgent(BaseAgent):
             if downloaded_file:
                 downloaded_sources.append(str(downloaded_file))
 
+        local_reference_docs = []
+        for candidate in sorted(report_folder.iterdir()):
+            if not candidate.is_file():
+                continue
+            if candidate.resolve() == md_path.resolve():
+                continue
+            if candidate.name.startswith("compliance_report_"):
+                continue
+            local_reference_docs.append(str(candidate))
+
+        evidence_files = [str(md_path), *downloaded_sources, *local_reference_docs]
+
         now = datetime.now(timezone.utc)
         report_name = f"compliance_report_{now.strftime('%Y%m%d_%H%M%S')}.md"
-        report_path = shared_folder / report_name
+        report_path = report_folder / report_name
         report_text = self._build_report(
             parsed=parsed,
             downloaded_sources=downloaded_sources,
+            local_reference_docs=local_reference_docs,
+            evidence_files=evidence_files,
             source_urls=source_urls,
             report_generated_at=now.isoformat(),
             business_file=str(md_path),
         )
         report_path.write_text(report_text, encoding="utf-8")
 
-        pdf_path = shared_folder / report_name.replace(".md", ".pdf")
+        pdf_path = report_folder / report_name.replace(".md", ".pdf")
         pdf_generated = self._export_pdf_report(report_text, pdf_path)
+        resources_archive_path = self._build_resources_archive(downloads_dir, report_folder, now)
 
         summary = (
             f"Compliance report created for {parsed['origin_country']} -> "
@@ -434,7 +468,27 @@ class ComplianceAgent(BaseAgent):
             "downloaded_sources": downloaded_sources,
             "pdf_path": str(pdf_path),
             "pdf_generated": pdf_generated,
+            "resources_archive_path": resources_archive_path,
         }
+
+    def _build_resources_archive(
+        self,
+        downloads_dir: Path,
+        report_folder: Path,
+        now: datetime,
+    ) -> str | None:
+        if not downloads_dir.exists() or not downloads_dir.is_dir():
+            return None
+        try:
+            archive_base = report_folder / f"compliance_resources_{now.strftime('%Y%m%d_%H%M%S')}"
+            archive_path = shutil.make_archive(
+                str(archive_base),
+                "zip",
+                root_dir=str(downloads_dir),
+            )
+            return str(archive_path)
+        except Exception:
+            return None
 
     def _parse_business_markdown(self, text: str) -> dict:
         origin = self._find_value(text, [r"origin country", r"business country", r"from country"])
@@ -444,6 +498,24 @@ class ComplianceAgent(BaseAgent):
         business = self._find_value(
             text, [r"business", r"business type", r"industry", r"product", r"service"]
         )
+
+        # If business not found by label, try to extract from unstructured text
+        if not business or business == "Business description not found in markdown.":
+            # Look for paragraph text that seems like business description
+            lines = text.split("\n")
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Skip headers, empty lines, and labeled lines
+                if (
+                    stripped
+                    and not stripped.startswith("#")
+                    and not stripped.startswith("-")
+                    and ":" not in stripped[:30]
+                    and not stripped.startswith("[")
+                    and len(stripped) > 20
+                ):
+                    business = stripped
+                    break
 
         urls = re.findall(r"https?://[^\s)\]]+", text)
         return {
@@ -455,13 +527,17 @@ class ComplianceAgent(BaseAgent):
 
     def _find_value(self, text: str, labels: list[str]) -> str | None:
         for label in labels:
-            # Accept formats like "Label: value" and "- Label: value"
+            # Accept formats: "Label: value", "- Label: value", "**Label**: value"
             match = re.search(
-                rf"(?im)^\s*(?:[-*]\s*)?(?:{label})\s*:\s*(.+?)\s*$",
+                rf"(?im)^\s*(?:[-*]\s*)?(?:\*\*)?(?:{label})(?:\*\*)?\s*:\s*(.+?)\s*$",
                 text,
+                re.MULTILINE,
             )
             if match:
-                return match.group(1).strip()
+                value = match.group(1).strip()
+                # Remove markdown bold formatting if present
+                value = value.replace("**", "").strip()
+                return value
         return None
 
     def _default_global_sources(self) -> list[str]:
@@ -557,6 +633,8 @@ class ComplianceAgent(BaseAgent):
         self,
         parsed: dict,
         downloaded_sources: list[str],
+        local_reference_docs: list[str],
+        evidence_files: list[str],
         source_urls: list[str],
         report_generated_at: str,
         business_file: str,
@@ -592,6 +670,12 @@ class ComplianceAgent(BaseAgent):
         else:
             lines.append("- No files downloaded. Check connectivity and source URLs.")
 
+        lines.extend(["", "## Provided Local Documents"])
+        if local_reference_docs:
+            lines.extend([f"- {p}" for p in local_reference_docs])
+        else:
+            lines.append("- No extra local documents were provided.")
+
         lines.extend(["", "## Risk Scoring"])
         if risk_items:
             for item in risk_items:
@@ -616,14 +700,351 @@ class ComplianceAgent(BaseAgent):
                 "- Employment, contractor, and payroll law obligations",
                 "- Record-keeping and audit evidence requirements",
                 "",
-                "## Next Actions",
-                "- Map each checklist line to country-specific law references.",
-                "- Assign owners and due dates for each compliance obligation.",
-                "- Open legal review for unresolved high-risk items.",
             ]
         )
 
+        # Add detailed Next Actions section with table
+        next_actions_section = self._build_next_actions_section(
+            parsed=parsed,
+            risk_items=risk_items,
+            evidence_files=evidence_files,
+        )
+        lines.extend(next_actions_section)
+
         return "\n".join(lines) + "\n"
+
+    def _build_next_actions_section(
+        self,
+        parsed: dict,
+        risk_items: list[dict],
+        evidence_files: list[str],
+    ) -> list[str]:
+        """Build comprehensive Next Actions section with compliance mapping table."""
+        lines = ["## Next Actions"]
+        lines.append("")
+
+        evidence_docs = self._load_evidence_documents(evidence_files)
+
+        # Mapping of checklist items to country-specific laws and references
+        checklist_mapping = {
+            "Business licensing and registration obligations": {
+                "australia": ["Australian Securities Exchange (ASX) registration", "ASIC Company Register"],
+                "vietnam": ["Ministry of Planning and Investment (MPI) registration", "Tax Authority registration"],
+                "united_states": ["Secretary of State business registration", "Federal Employer ID (EIN)"],
+                "singapore": ["ACRA (Accounting & Corporate Regulatory Authority)", "Singapore business registration"],
+                "united_kingdom": ["Companies House registration", "UK tax authority (HMRC) registration"],
+                "canada": ["Corporations Canada registration", "Provincial business registration"],
+            },
+            "Product/service specific permits and approvals": {
+                "australia": ["TGA (Therapeutic Goods Administration) for medical", "NATA accreditation", "Industry-specific permits"],
+                "vietnam": ["Ministry of Health approvals", "Product quality certifications", "Import license"],
+                "united_states": ["FDA (Food and Drug Administration) approvals", "FTC compliance", "Industry-specific licensing"],
+                "singapore": ["HSA (Health Sciences Authority) for medical/food", "Enterprise Singapore approvals"],
+                "united_kingdom": ["CMA (Competition and Markets Authority)", "Product certification marks", "Industry-specific permits"],
+                "canada": ["Health Canada product approvals", "Canadian Standards Association (CSA)", "Provincial licensing"],
+            },
+            "Import/export controls and customs classification": {
+                "australia": ["Australian Border Force (ABF) tariff classification", "Harmonized System (HS) code validation"],
+                "vietnam": ["Vietnam Customs General Department (CGD)", "HS code classification"],
+                "united_states": ["CBP (Customs and Border Protection) HS code", "ITAR/EAR export controls"],
+                "singapore": ["Singapore Customs HS code", "Strategic goods licensing"],
+                "united_kingdom": ["UK Customs tariff classification", "Post-Brexit trade procedures"],
+                "canada": ["Canada Border Services Agency (CBSA) tariff classification", "HS code validation"],
+            },
+            "Restricted/prohibited goods and end-use restrictions": {
+                "australia": ["DFAT (Dept of Foreign Affairs) restricted goods list", "Controlled export list"],
+                "vietnam": ["Ministry of Industry and Trade restricted goods", "Hazardous materials regulations"],
+                "united_states": ["Commerce Control List (CCL)", "Entity List screening", "ITAR restrictions"],
+                "singapore": ["STGM (Strategic Goods Control) list", "Controlled items schedule"],
+                "united_kingdom": ["UK Strategic Export Controls List", "FCDO restricted items"],
+                "canada": ["Export Control List (ECL)", "ITAR-equivalent restrictions"],
+            },
+            "Economic sanctions and denied-party screening": {
+                "australia": ["DFAT Sanctions list", "UN consolidated list screening"],
+                "vietnam": ["UN and bilateral sanctions screening", "Ministry of Finance watch lists"],
+                "united_states": ["OFAC (Office of Foreign Assets Control) SDN list", "BIS denied persons list"],
+                "singapore": ["UN Security Council sanctions list", "Singapore MAS financial sanctions"],
+                "united_kingdom": ["UK Office of Financial Sanctions Implementation (OFSI)", "EU sanctions retained list"],
+                "canada": ["Global Affairs Canada sanctions list", "UNSC consolidated lists"],
+            },
+            "Tax, VAT/GST, and transfer pricing obligations": {
+                "australia": ["ATO (Australian Tax Office) GST registration", "Transfer pricing documentation"],
+                "vietnam": ["Vietnam General Department of Customs (VAT)", "Transfer pricing rules"],
+                "united_states": ["IRS tax ID registration", "Transfer pricing (26 CFR 1.482)"],
+                "singapore": ["IRAS (Inland Revenue Authority) GST/VAT", "Transfer pricing guidelines"],
+                "united_kingdom": ["HMRC VAT registration", "UK transfer pricing regulations"],
+                "canada": ["CRA (Canada Revenue Agency) GST/HST registration", "Transfer pricing rules (ITA section 247)"],
+            },
+            "Consumer protection and labeling requirements": {
+                "australia": ["ACCC (Australian Competition & Consumer Commission)", "Australian Consumer Law labeling requirements"],
+                "vietnam": ["Vietnam Ministry of Industry and Trade consumer protection", "Labeling standards"],
+                "united_states": ["FTC (Federal Trade Commission) labeling", "State-level consumer protection"],
+                "singapore": ["CCCS (Competition and Consumer Commission of Singapore)", "Consumer Protection (Fair Trading) Act"],
+                "united_kingdom": ["CMA consumer protection regulations", "Advertising Standards Authority"],
+                "canada": ["Competition Act (consumer protection)", "Consumer Packaging and Labeling Act"],
+            },
+            "Data protection and cybersecurity requirements": {
+                "australia": ["Privacy Act 1988 (Australian Personal Data)", "Notifiable Data Breaches scheme"],
+                "vietnam": ["Law on Cybersecurity (2018)", "Data localization requirements"],
+                "united_states": ["State privacy laws (CCPA, etc.)", "NIST cybersecurity framework"],
+                "singapore": ["PDPA (Personal Data Protection Act)", "Cybersecurity Act requirements"],
+                "united_kingdom": ["UK GDPR (retained EU law)", "Data Protection Act 2018"],
+                "canada": ["PIPEDA (Personal Information Protection)", "PECA (cybersecurity obligations)"],
+            },
+            "Employment, contractor, and payroll law obligations": {
+                "australia": ["Fair Work Act 2009", "National Employment Standards", "Award/agreement rates"],
+                "vietnam": ["Vietnam Labor Code", "Minimum wage regulations", "Social insurance requirements"],
+                "united_states": ["FLSA (Fair Labor Standards Act)", "State employment laws", "Worker classification rules"],
+                "singapore": ["Employment Act", "Ministry of Manpower (MOM) regulations"],
+                "united_kingdom": ["Employment Rights Act 1996", "National Living Wage requirements"],
+                "canada": ["Canada Labour Code", "Provincial employment standards"],
+            },
+            "Record-keeping and audit evidence requirements": {
+                "australia": ["Tax Records Act", "7-year retention requirements", "ATO audit evidence"],
+                "vietnam": ["Vietnam Accounting Law", "Record retention (3-5 years)", "Tax audit requirements"],
+                "united_states": ["IRS record retention (3-7 years)", "SOX compliance documentation"],
+                "singapore": ["ACRA record retention (5 years)", "Audit trail requirements"],
+                "united_kingdom": ["HMRC record retention (6 years)", "Accounting records regulations"],
+                "canada": ["CRA record retention (6 years)", "GST input tax documentation"],
+            },
+        }
+
+        origin = self._normalize_country(parsed.get("origin_country", ""))
+        destination = self._normalize_country(parsed.get("destination_country", ""))
+
+        # Build detailed compliance mapping table
+        lines.append("### Compliance Mapping Table")
+        lines.append("")
+        lines.append(
+            "| Checklist Item | Origin Country Law | Destination Country Law | Reference Evidence | Legal Date | Owner | Due Date | Status | Legal Review Required |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|")
+
+        checklist_items = [
+            "Business licensing and registration obligations",
+            "Product/service specific permits and approvals",
+            "Import/export controls and customs classification",
+            "Restricted/prohibited goods and end-use restrictions",
+            "Economic sanctions and denied-party screening",
+            "Tax, VAT/GST, and transfer pricing obligations",
+            "Consumer protection and labeling requirements",
+            "Data protection and cybersecurity requirements",
+            "Employment, contractor, and payroll law obligations",
+            "Record-keeping and audit evidence requirements",
+        ]
+
+        for item in checklist_items:
+            mapping = checklist_mapping.get(item, {})
+            origin_laws = mapping.get(origin, ["General trade compliance"])
+            destination_laws = mapping.get(destination, ["General trade compliance"])
+
+            origin_text = "; ".join(origin_laws[:1]) if origin_laws else "TBD"
+            destination_text = "; ".join(destination_laws[:1]) if destination_laws else "TBD"
+
+            origin_reference, origin_date = self._extract_reference_and_date(
+                origin_text,
+                evidence_docs,
+            )
+            destination_reference, destination_date = self._extract_reference_and_date(
+                destination_text,
+                evidence_docs,
+            )
+
+            reference_evidence = (
+                f"Origin: {origin_reference}; Destination: {destination_reference}"
+            )
+            legal_date = f"Origin: {origin_date}; Destination: {destination_date}"
+
+            # Determine if legal review is required (high-risk items)
+            legal_review = "YES" if any(r["risk"] == "high" for r in risk_items) else "NO"
+
+            lines.append(
+                f"| {item} | {origin_text} | {destination_text} | {reference_evidence} | {legal_date} | [Assign Owner] | [Set Date] | In Progress | {legal_review} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "### Detailed Implementation Steps",
+                "",
+            ]
+        )
+
+        # Add detailed explanations for high-risk items
+        high_risk_items = [r for r in risk_items if r["risk"] == "high"]
+        if high_risk_items:
+            lines.extend(
+                [
+                    "#### ⚠️ HIGH-RISK COMPLIANCE AREAS REQUIRING IMMEDIATE LEGAL REVIEW",
+                    "",
+                ]
+            )
+            for idx, item in enumerate(high_risk_items, 1):
+                lines.extend(
+                    [
+                        f"**{idx}. {item['area']}**",
+                        "",
+                        f"- **Risk Level**: {item['risk'].upper()}",
+                        f"- **Reason**: {item['reason']}",
+                        f"- **Action**: Schedule immediate legal consultation for both {parsed['origin_country']} and {parsed['destination_country']}",
+                        f"- **Responsible**: Chief Legal Officer / Compliance Manager",
+                        f"- **Timeline**: Within 2 weeks of market entry planning",
+                        "",
+                    ]
+                )
+
+        lines.extend(
+            [
+                "#### Implementation Checklist",
+                "",
+                "For each compliance item, complete these steps:",
+                "",
+                "1. **Research**: Verify applicable laws in origin ({}) and destination ({}) countries".format(
+                    parsed["origin_country"], parsed["destination_country"]
+                ),
+                "2. **Document**: Create a compliance brief for each obligation",
+                "3. **Assign**: Designate owner with clear accountability",
+                "4. **Schedule**: Set implementation deadline (suggest 30-90 days pre-launch)",
+                "5. **Review**: Have licensed legal/compliance professional validate approach",
+                "6. **Implement**: Execute procedures and maintain records",
+                "7. **Monitor**: Continuous compliance monitoring and updates",
+                "",
+                "#### Key Contact Information (To Be Populated)",
+                "",
+                "| Role | Name | Email | Phone | Country |",
+                "|---|---|---|---|---|",
+                "| Compliance Lead | [Name] | [Email] | [Phone] | {} |".format(parsed["origin_country"]),
+                "| Legal Counsel | [Name] | [Email] | [Phone] | {} |".format(parsed["destination_country"]),
+                "| Tax Advisor | [Name] | [Email] | [Phone] | [Country] |",
+                "| Regulatory Affairs | [Name] | [Email] | [Phone] | [Country] |",
+                "",
+                "#### Next Review Date",
+                "",
+                "- Initial Compliance Review: [Set 30 days from report date]",
+                "- Quarterly Review: [Set quarterly meetings]",
+                "- Legal Sign-off Required: YES (before market entry)",
+                "",
+            ]
+        )
+
+        return lines
+
+    def _load_evidence_documents(self, evidence_files: list[str]) -> list[dict]:
+        docs: list[dict] = []
+        seen_paths = set()
+        allowed_suffixes = {".md", ".txt", ".html", ".htm", ".json", ".csv", ".xml"}
+
+        for raw_path in evidence_files:
+            path = Path(raw_path)
+            try:
+                resolved = path.resolve()
+            except Exception:
+                continue
+
+            if str(resolved) in seen_paths:
+                continue
+            seen_paths.add(str(resolved))
+
+            if not resolved.exists() or not resolved.is_file():
+                continue
+            if resolved.suffix.lower() not in allowed_suffixes:
+                continue
+
+            try:
+                text = resolved.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+
+            if not text.strip():
+                continue
+
+            # Limit per-doc size to keep extraction efficient.
+            docs.append({"path": str(resolved), "text": text[:200000]})
+
+        return docs
+
+    def _extract_reference_and_date(self, law_label: str, evidence_docs: list[dict]) -> tuple[str, str]:
+        if not law_label or law_label == "TBD":
+            return "TBD", "Not found"
+
+        law_lower = law_label.lower()
+        fallback_reference = f"{law_label} (no local evidence match)"
+
+        for doc in evidence_docs:
+            doc_text = doc["text"]
+            lowered = doc_text.lower()
+            index = lowered.find(law_lower)
+            if index == -1:
+                continue
+
+            date_text = self._extract_date_near_index(doc_text, index)
+            source_name = Path(doc["path"]).name
+            return f"{law_label} in {source_name}", date_text
+
+        law_keywords = [w for w in re.findall(r"[a-zA-Z]{4,}", law_lower) if w not in {"and", "with", "from", "for", "requirements", "general", "trade", "compliance"}]
+        for doc in evidence_docs:
+            lowered = doc["text"].lower()
+            if not law_keywords:
+                continue
+            keyword_hits = sum(1 for kw in law_keywords[:4] if kw in lowered)
+            if keyword_hits < 2:
+                continue
+
+            date_text = self._extract_date_near_keywords(doc["text"], law_keywords[:2])
+            source_name = Path(doc["path"]).name
+            return f"{law_label} (keyword match in {source_name})", date_text
+
+        return fallback_reference, "Not found"
+
+    def _extract_date_near_index(self, text: str, index: int) -> str:
+        start = max(0, index - 350)
+        end = min(len(text), index + 350)
+        window = text[start:end]
+
+        date_text = self._extract_date_from_text(window)
+        if date_text:
+            return date_text
+
+        date_text = self._extract_date_from_text(text)
+        return date_text or "Not found"
+
+    def _extract_date_near_keywords(self, text: str, keywords: list[str]) -> str:
+        lowered = text.lower()
+        for kw in keywords:
+            idx = lowered.find(kw)
+            if idx == -1:
+                continue
+            date_text = self._extract_date_near_index(text, idx)
+            if date_text != "Not found":
+                return date_text
+        return self._extract_date_from_text(text) or "Not found"
+
+    def _extract_date_from_text(self, text: str) -> str | None:
+        month_names = (
+            "January|February|March|April|May|June|July|August|September|October|November|December"
+        )
+        patterns = [
+            r"\b\d{4}-\d{2}-\d{2}\b",
+            r"\b\d{1,2}/\d{1,2}/\d{4}\b",
+            r"\b\d{1,2}-\d{1,2}-\d{4}\b",
+            rf"\b(?:{month_names})\s+\d{{1,2}},\s+\d{{4}}\b",
+            rf"\b\d{{1,2}}\s+(?:{month_names})\s+\d{{4}}\b",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                return match.group(0)
+
+        indicator_pattern = re.compile(
+            rf"\b(?:effective|updated|last updated|published|issued)\b[^\n]{{0,40}}((?:{month_names})\s+\d{{1,2}},\s+\d{{4}}|\d{{4}}-\d{{2}}-\d{{2}}|\d{{1,2}}/\d{{1,2}}/\d{{4}})",
+            flags=re.IGNORECASE,
+        )
+        indicator_match = indicator_pattern.search(text)
+        if indicator_match:
+            return indicator_match.group(1)
+
+        return None
 
     def _risk_assessment(self, parsed: dict) -> list[dict]:
         summary = (parsed.get("business_summary") or "").lower()
@@ -649,16 +1070,16 @@ class ComplianceAgent(BaseAgent):
                 "Financial services often trigger licensing and anti-money-laundering obligations.",
             ),
             (
+                ["hardware", "electronics", "robot", "sensor", "iot", "telecom"],
+                "Import controls and technical standards",
+                "high",
+                "Physical goods and electronics require complex customs classification, technical compliance, and may face export controls.",
+            ),
+            (
                 ["data", "ai", "software", "saas", "cloud", "platform"],
                 "Data protection and cybersecurity",
                 "medium",
                 "Digital services may trigger privacy, cross-border data transfer, and cyber rules.",
-            ),
-            (
-                ["hardware", "electronics", "robot", "sensor", "iot", "telecom"],
-                "Import controls and technical standards",
-                "medium",
-                "Physical goods may need customs classification and technical conformity checks.",
             ),
         ]
 

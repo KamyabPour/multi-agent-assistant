@@ -67,7 +67,8 @@ For experienced users, follow [INSTALLATION.md](INSTALLATION.md).
 cd services/orchestrator
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .
+python -m pip install --upgrade pip setuptools wheel
+pip install -e ".[dev]"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
