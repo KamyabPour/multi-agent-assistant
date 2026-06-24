@@ -1,9 +1,10 @@
 """Tests for GitHub Models integration."""
 
 import pytest
+import httpx
 from app.integrations.github_models import GitHubModelsClient, GitHubModelsError
 from app.core.config import Settings
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 
 class TestGitHubModelsClient:
@@ -80,7 +81,7 @@ class TestGitHubModelsClient:
     @patch("httpx.Client.post")
     def test_generate_response_api_error(self, mock_post):
         """Test error handling for API failures."""
-        mock_post.side_effect = Exception("Connection failed")
+        mock_post.side_effect = httpx.HTTPError("Connection failed")
 
         settings = Settings(
             github_token="ghp_test", github_models_enabled=True
@@ -109,27 +110,25 @@ class TestGitHubModelsClient:
         assert "GitHub Models API connection successful" in result["message"]
 
     def test_test_connection_error(self):
-        """Test connection test returns error when not configured."""
+        """Test connection setup fails when token missing."""
         settings = Settings(
             github_token=None, github_models_enabled=True
         )
-        # Should not raise, just return error dict
-        result = GitHubModelsClient.test_connection.__func__(None, settings)
-        # This would need adjustment based on implementation
+        with pytest.raises(GitHubModelsError):
+            GitHubModelsClient(settings)
 
 
 class TestSpecialistAgentsWithBrain:
     """Test agents using GitHub Models brain."""
 
-    @patch("app.agents.specialists.PlannerAgent.brain.generate_response")
-    def test_planner_agent_uses_brain(self, mock_generate):
+    def test_planner_agent_uses_brain(self):
         """Test planner agent calls brain."""
         from app.agents.specialists import PlannerAgent
-        from unittest.mock import Mock
 
-        mock_generate.return_value = "Create a plan|Action 1: Details (high)|Action 2: Details"
         mock_brain = Mock()
-        mock_brain.generate_response = mock_generate
+        mock_brain.generate_response.return_value = (
+            "Create a plan|Action 1: Details (high)|Action 2: Details"
+        )
 
         agent = PlannerAgent(brain=mock_brain)
         result = agent.run(
@@ -140,15 +139,14 @@ class TestSpecialistAgentsWithBrain:
 
         assert result.summary == "Create a plan"
         assert len(result.actions) >= 1
-        mock_generate.assert_called_once()
+        mock_brain.generate_response.assert_called_once()
 
-    @patch("app.agents.specialists.PlannerAgent.brain")
-    def test_agent_fallback_when_brain_unavailable(self, mock_brain):
+    def test_agent_fallback_when_brain_unavailable(self):
         """Test agent returns fallback when brain fails."""
         from app.agents.specialists import PlannerAgent
 
+        mock_brain = Mock()
         mock_brain.generate_response.side_effect = Exception("API error")
-        mock_brain.side_effect = Exception("No brain")
 
         agent = PlannerAgent(brain=mock_brain)
         result = agent.run(
