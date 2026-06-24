@@ -56,6 +56,10 @@ For experienced users, follow [INSTALLATION.md](INSTALLATION.md).
 - All changes should be merged through pull requests.
 - Required status checks must pass before merge.
 - Avoid direct pushes to `main` to preserve deployment quality gates.
+- Promotion flow is: feature branch -> `dev` -> `staging` -> `main`.
+- PRs into `staging` must come from `dev`.
+- PRs into `main` must come from `staging`.
+- Backend tests and web build run at each gate.
 
 ## 1) Backend
 
