@@ -51,6 +51,12 @@ The installer will guide you through:
 
 For experienced users, follow [INSTALLATION.md](INSTALLATION.md).
 
+## CI/CD Policy
+
+- All changes should be merged through pull requests.
+- Required status checks must pass before merge.
+- Avoid direct pushes to `main` to preserve deployment quality gates.
+
 ## 1) Backend
 
 ```powershell
