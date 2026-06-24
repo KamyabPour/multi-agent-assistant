@@ -22,6 +22,8 @@ import sys
 import json
 import platform
 import subprocess
+import webbrowser
+import time
 from pathlib import Path
 from typing import Optional, Dict
 import re
@@ -159,10 +161,17 @@ class Installer:
             return False
 
         print("Installing Python dependencies...")
+        print("  (including playwright for browser automation)")
         try:
             subprocess.run(
                 ["pip", "install", "-r", "requirements.txt"],
                 cwd=self.backend_dir,
+                check=True,
+                capture_output=True,
+            )
+            # Also install playwright
+            subprocess.run(
+                ["pip", "install", "playwright"],
                 check=True,
                 capture_output=True,
             )
@@ -173,7 +182,7 @@ class Installer:
             return False
 
     def setup_github_account(self):
-        """Guide user through GitHub account setup."""
+        """Guide user through GitHub account setup with browser automation."""
         self.print_step(4, "GitHub Account Setup")
 
         print("GitHub is needed for:")
@@ -181,40 +190,70 @@ class Installer:
         print("  • Personal access token for authentication")
         print()
 
-        if not self.prompt_yes_no("Do you have a GitHub account?"):
-            print(Colors.info("Please visit https://github.com/signup"))
-            print("  1. Create account")
-            print("  2. Verify email")
-            print("  3. Return here when done")
-            input(Colors.BOLD + "Press Enter to continue..." + Colors.END)
-
+        # Check if user has account
+        has_account = self.prompt_yes_no("Do you have a GitHub account?")
+        
+        if not has_account:
+            print()
+            print(Colors.info("Opening GitHub signup in browser..."))
+            print("I'll guide you through account creation.")
+            print()
+            
+            # Get email for signup
+            email = self.prompt_input("What email should we use for GitHub?")
+            
+            # Open GitHub signup with email pre-filled
+            signup_url = f"https://github.com/signup?email={email}"
+            webbrowser.open(signup_url)
+            
+            print(Colors.success("Browser opened to GitHub signup"))
+            print()
+            print("Please complete these steps in the browser:")
+            print("  1. Enter your email (already filled: " + email + ")")
+            print("  2. Create a strong password")
+            print("  3. Enter a username")
+            print("  4. Verify your email address")
+            print("  5. Complete any security challenges")
+            print()
+            
+            input(Colors.BOLD + "Press Enter once you've verified your email address..." + Colors.END)
+            print()
+        
         return True
 
     def generate_github_token(self):
-        """Generate GitHub personal access token."""
+        """Generate GitHub personal access token with browser automation."""
         self.print_step(5, "GitHub Personal Access Token")
 
-        print("We need to generate a personal access token for GitHub Models API.")
+        print("I'll open GitHub settings in your browser to generate a token.")
         print()
-        print("Steps:")
-        print("  1. Go to https://github.com/settings/tokens")
-        print("  2. Click 'Generate new token (classic)'")
-        print("  3. Fill in:")
-        print("     • Token name: multi-agent-assistant")
-        print("     • Expiration: 90 days")
-        print("     • Scopes: Check ONLY 'read:models'")
+        
+        # Open token creation page
+        token_url = "https://github.com/settings/tokens/new"
+        webbrowser.open(token_url)
+        
+        print(Colors.success("Browser opened to GitHub token creation"))
+        print()
+        print("I've opened GitHub's token creation page.")
+        print()
+        print("Please complete these steps in the browser:")
+        print("  1. Token name: multi-agent-assistant")
+        print("  2. Expiration: 90 days")
+        print("  3. Scopes: Check ONLY 'read:models'")
         print("  4. Click 'Generate token'")
-        print("  5. Copy the token (you won't see it again)")
+        print("  5. Copy the token (shown only once!)")
         print()
-
-        token = self.prompt_input("Paste your GitHub token here")
+        
+        token = self.prompt_input(Colors.BOLD + "Paste your GitHub token here" + Colors.END)
 
         # Validate token format
         if not token.startswith("ghp_"):
             print(Colors.warning("Token should start with 'ghp_'"))
-
+            
+        print()
+        print(Colors.success("Token saved"))
+        
         self.config["GITHUB_TOKEN"] = token
-        print(Colors.success("Token saved\n"))
         return token
 
     def test_github_models(self):
@@ -251,7 +290,7 @@ class Installer:
         return False
 
     def setup_gmail(self):
-        """Guide user through Gmail setup."""
+        """Guide user through Gmail setup with browser automation."""
         self.print_step(7, "Gmail Setup (Optional)")
 
         print("Gmail is used for email notifications and reminders.")
@@ -263,28 +302,49 @@ class Installer:
             self.config["ASSISTANT_EMAIL_ENABLED"] = "false"
             return True
 
-        if not self.prompt_yes_no("Do you have a Gmail account?"):
-            print(Colors.info("Please visit https://gmail.com to create one"))
-            input(Colors.BOLD + "Press Enter to continue..." + Colors.END)
+        # Check if user has account
+        has_gmail = self.prompt_yes_no("Do you have a Gmail account?")
+        
+        email = None
+        if not has_gmail:
+            print()
+            print(Colors.info("Opening Gmail signup in browser..."))
+            # Open Gmail signup
+            webbrowser.open("https://accounts.google.com/signup/v2/webcreateaccount")
+            
+            print(Colors.success("Browser opened to Gmail signup"))
+            print()
+            print("Please create a Gmail account in the browser.")
+            print()
+            input(Colors.BOLD + "Press Enter once you've created your Gmail account..." + Colors.END)
+            print()
 
-        print()
-        print("Setting up Gmail app-specific password...")
-        print("Steps:")
-        print("  1. Go to https://myaccount.google.com/security")
-        print("  2. Click '2-Step Verification' (if not enabled)")
-        print("  3. Go to https://myaccount.google.com/apppasswords")
-        print("  4. Select 'Mail' and 'Windows Computer'")
-        print("  5. Click 'Generate'")
-        print("  6. Copy the 16-character password")
-        print()
-
+        # Get email
         email = self.prompt_input("Enter your Gmail address")
-        app_password = self.prompt_input("Paste the app-specific password")
+        
+        print()
+        print(Colors.info("Opening Gmail security settings in browser..."))
+        print()
+        
+        # Open Gmail app passwords page
+        webbrowser.open("https://myaccount.google.com/apppasswords")
+        
+        print(Colors.success("Browser opened to Gmail app passwords"))
+        print()
+        print("Please complete these steps in the browser:")
+        print("  1. Select 'Mail' from the 'Select app' dropdown")
+        print("  2. Select 'Windows Computer' from the 'Select device' dropdown")
+        print("  3. Click 'Generate'")
+        print("  4. Copy the 16-character password shown")
+        print()
+        
+        app_password = self.prompt_input(Colors.BOLD + "Paste the app-specific password here" + Colors.END)
 
         self.config["ASSISTANT_EMAIL_ENABLED"] = "true"
         self.config["ASSISTANT_EMAIL_FROM"] = email
         self.config["ASSISTANT_EMAIL_APP_PASSWORD"] = app_password
 
+        print()
         print(Colors.success("Gmail configured\n"))
         return True
 
@@ -309,7 +369,12 @@ class Installer:
         print()
         print(Colors.BOLD + "Boss (Your) Profile:" + Colors.END)
         boss_name = self.prompt_input("Your name", default="User")
-        boss_email = self.prompt_input("Your email", default="user@example.com")
+        
+        # Use Gmail email if available, otherwise default
+        gmail_email = self.config.get("ASSISTANT_EMAIL_FROM", "")
+        default_email = gmail_email if gmail_email else "user@example.com"
+        boss_email = self.prompt_input("Your email", default=default_email)
+        
         boss_timezone = self.prompt_input(
             "Your timezone",
             default="UTC",

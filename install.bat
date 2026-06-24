@@ -65,6 +65,7 @@ echo.
 
 REM Install backend dependencies
 echo [3] Installing Python dependencies...
+pip install -q playwright
 cd services\orchestrator
 pip install -q -r requirements.txt
 if errorlevel 1 (
@@ -77,33 +78,41 @@ cd ..\..
 echo.
 
 REM GitHub setup
-echo [4] GitHub Account Setup
+echo [4] GitHub Account Setup (Browser Automated)
 echo.
 echo GitHub is needed for GitHub Models API ^(free LLM brain for your assistant^).
 echo.
 set /p has_github="Do you already have a GitHub account? (y/n): "
 if /i not "%has_github%"=="y" (
-    echo Please visit https://github.com/signup
-    echo   1. Create account
-    echo   2. Verify email
-    echo   3. Return here
+    echo.
+    echo Opening GitHub signup in your browser...
+    set /p signup_email="What email should we use for GitHub? "
+    start https://github.com/signup?email=!signup_email!
+    echo Browser opened to GitHub signup.
+    echo.
+    echo Please complete these steps:
+    echo   1. Enter your email ^(already filled: !signup_email!^)
+    echo   2. Create a strong password
+    echo   3. Enter a username
+    echo   4. Verify your email address
     echo.
     pause
 )
 
 REM GitHub token
 echo.
-echo [5] GitHub Personal Access Token
+echo [5] GitHub Personal Access Token (Browser Automated)
 echo.
-echo Steps to generate token:
-echo   1. Go to https://github.com/settings/tokens
-echo   2. Click 'Generate new token (classic)'
-echo   3. Fill in:
-echo      - Token name: multi-agent-assistant
-echo      - Expiration: 90 days
-echo      - Scopes: Check ONLY 'read:models'
+echo Opening GitHub token creation page in your browser...
+start https://github.com/settings/tokens/new
+echo Browser opened.
+echo.
+echo Please complete these steps in the browser:
+echo   1. Token name: multi-agent-assistant
+echo   2. Expiration: 90 days
+echo   3. Scopes: Check ONLY 'read:models'
 echo   4. Click 'Generate token'
-echo   5. Copy the token
+echo   5. Copy the token ^(shown only once!^)
 echo.
 set /p GITHUB_TOKEN="Paste your GitHub token: "
 
@@ -115,7 +124,7 @@ if "%GITHUB_TOKEN%"=="" (
 echo.
 
 REM Gmail setup
-echo [6] Gmail Setup (Optional)
+echo [6] Gmail Setup (Browser Automated, Optional)
 echo.
 set /p setup_gmail="Do you want to set up Gmail integration? (y/n): "
 
@@ -126,19 +135,28 @@ set GMAIL_PASSWORD=
 if /i "%setup_gmail%"=="y" (
     set /p has_gmail="Do you have a Gmail account? (y/n): "
     if /i not "%has_gmail%"=="y" (
-        echo Please visit https://gmail.com to create one
+        echo.
+        echo Opening Gmail signup in your browser...
+        start https://accounts.google.com/signup/v2/webcreateaccount
+        echo Browser opened to Gmail signup.
+        echo.
+        echo Please create a Gmail account.
         pause
     )
     
     echo.
-    echo Steps for app-specific password:
-    echo   1. Go to https://myaccount.google.com/security
-    echo   2. Enable 2-Step Verification
-    echo   3. Go to https://myaccount.google.com/apppasswords
-    echo   4. Select 'Mail' and 'Windows Computer'
-    echo   5. Copy the 16-character password
-    echo.
     set /p GMAIL_FROM="Enter your Gmail address: "
+    echo.
+    echo Opening Gmail app passwords in your browser...
+    start https://myaccount.google.com/apppasswords
+    echo Browser opened.
+    echo.
+    echo Please complete these steps in the browser:
+    echo   1. Select 'Mail' from the 'Select app' dropdown
+    echo   2. Select 'Windows Computer' from the 'Select device' dropdown
+    echo   3. Click 'Generate'
+    echo   4. Copy the 16-character password shown
+    echo.
     set /p GMAIL_PASSWORD="Paste the app-specific password: "
     set GMAIL_ENABLED=true
 )

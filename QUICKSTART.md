@@ -1,4 +1,4 @@
-# Quick Start - Interactive Installation
+# Quick Start - Interactive Installation with Browser Automation
 
 **One command to set up everything:**
 
@@ -16,32 +16,34 @@ install.bat
 
 ## What the Installer Does
 
-The installer will guide you through all setup steps interactively:
+The installer guides you through all setup steps with **browser automation**:
 
 1. ✅ **Python & Dependencies Check**
    - Verifies Python 3.11+
    - Checks git, pip, curl availability
-   - Installs Python dependencies from requirements.txt
+   - Installs Python dependencies (including Playwright for browser automation)
 
-2. ✅ **GitHub Account & Token**
-   - Detects if you have a GitHub account
-   - Guides you to create one if needed
-   - Helps generate a personal access token
-   - Configures GitHub Models API access
+2. ✅ **GitHub Account & Token (Browser Automated)**
+   - Automatically opens GitHub signup in your browser
+   - Pre-fills your email
+   - **You only need to**: Create password, verify email
+   - Automatically opens GitHub token settings page
+   - **You only need to**: Select scopes and copy token
 
 3. ✅ **GitHub Models API (AI Brain)**
    - Tests token connectivity
    - Sets up the LLM brain for intelligent responses
    - Selects gpt-4o-mini as default (free, fast)
 
-4. ✅ **Gmail Setup (Optional)**
-   - Guides through Gmail account creation (if needed)
-   - Generates app-specific password
-   - Sets up email notifications
+4. ✅ **Gmail Setup (Browser Automated, Optional)**
+   - Automatically opens Gmail signup (if needed)
+   - Automatically opens Gmail app passwords page
+   - **You only need to**: Generate and copy app password
 
 5. ✅ **Profile Configuration**
    - Creates assistant profile (skills, email)
    - Creates your (boss) profile (name, goals, constraints)
+   - Auto-fills your email from Gmail setup (if enabled)
    - Saves profiles to `data/` directory
 
 6. ✅ **Configuration & Testing**
@@ -78,39 +80,57 @@ The installer verifies:
 
 If any are missing, install them and run again.
 
----
-
-### Step 3: GitHub Account
-
-If you don't have a GitHub account, the installer will:
-1. Show you https://github.com/signup
-2. Ask you to create one and verify email
-3. Wait for you to press Enter
-
-If you already have one, just press `y`.
 
 ---
 
-### Step 4: Generate GitHub Token
+### Step 3: GitHub Account (Browser Automation)
 
-The installer will guide you to:
-1. Open https://github.com/settings/tokens
-2. Create a token with `read:models` scope only
-3. Copy and paste it into the terminal
+**If you DON'T have a GitHub account:**
+1. Installer **automatically opens** GitHub signup in your browser
+2. Your email is **pre-filled** in the signup form
+3. **You only need to:**
+   - Create a strong password
+   - Enter a username
+   - Verify your email address
+4. Press Enter when done
 
-**Important:** Only grant `read:models` scope for security.
+**If you ALREADY have a GitHub account:**
+- Just press `y` and continue
 
 ---
 
-### Step 5: Gmail Setup (Optional)
+### Step 4: Generate GitHub Token (Browser Automation)
 
-If you want email notifications:
-1. Installer opens https://myaccount.google.com/security
-2. Guides you to enable 2-Step Verification
-3. Shows how to generate an app-specific password
-4. Saves configuration
+1. Installer **automatically opens** GitHub token creation page
+2. The page shows where to set:
+   - Token name: `multi-agent-assistant`
+   - Expiration: `90 days`
+   - Scope: `read:models` (ONLY)
+3. **You only need to:**
+   - Check the `read:models` checkbox
+   - Click "Generate token"
+   - Copy the token from the page
+4. Paste it into the terminal
 
-Press `n` to skip if you don't want email.
+**Why only `read:models`?** It's the minimal permission needed for security.
+
+---
+
+### Step 5: Gmail Setup (Browser Automation, Optional)
+
+**If you want email notifications:**
+
+1. Installer **automatically opens** Gmail signup (if needed)
+2. **You only need to:** Create account and verify
+
+3. Installer **automatically opens** Gmail app passwords page
+4. **You only need to:**
+   - Select "Mail" and "Windows Computer" dropdowns
+   - Click "Generate"
+   - Copy the 16-character password
+5. Paste it into the terminal
+
+**Skip this step?** Press `n` to skip email setup.
 
 ---
 
@@ -122,7 +142,7 @@ Press `n` to skip if you don't want email.
 
 **Boss Profile (You):**
 - Name
-- Email
+- Email (**auto-filled from Gmail setup** if enabled)
 - Timezone
 - Goals (e.g., "Ship system by Friday", "Learn Rust")
 - Constraints (e.g., "Max 50 hours/week")
