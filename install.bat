@@ -269,21 +269,27 @@ echo.
 
 REM Create desktop shortcut
 echo Creating desktop shortcut...
-set "SHORTCUT=%USERPROFILE%\Desktop\AI Assistant.lnk"
+
+REM Generate custom icon with assistant initial (e.g. "B" for buddy)
+set "ICON_PATH=%USERPROFILE%\.assistant\%ASSISTANT_NAME%.ico"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0create_icon.ps1" -AssistantName "%ASSISTANT_NAME%" -OutputDir "%USERPROFILE%\.assistant"
+
+set "SHORTCUT=%USERPROFILE%\Desktop\%ASSISTANT_NAME%.lnk"
 set "LAUNCHER=%CD%\start_assistant.bat"
 powershell -NoProfile -Command ^
     "$ws = New-Object -ComObject WScript.Shell;" ^
     "$s = $ws.CreateShortcut('%SHORTCUT%');" ^
     "$s.TargetPath = '%LAUNCHER%';" ^
     "$s.WorkingDirectory = '%CD%';" ^
-    "$s.Description = 'Launch AI Assistant';" ^
-    "$s.IconLocation = '%SystemRoot%\System32\imageres.dll,27';" ^
+    "$s.Description = 'Launch %ASSISTANT_NAME%';" ^
+    "$s.IconLocation = '%ICON_PATH%';" ^
     "$s.Save()"
 
 if exist "%SHORTCUT%" (
     echo.
     echo ============================================================
-    echo   Desktop shortcut created: AI Assistant
+    echo   Desktop shortcut created: %ASSISTANT_NAME%
+    echo   Icon shows the letter: %ASSISTANT_NAME:~0,1%
     echo   Double-click it to start the assistant and open the chat.
     echo ============================================================
 ) else (
