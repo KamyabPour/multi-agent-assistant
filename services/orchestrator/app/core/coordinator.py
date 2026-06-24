@@ -1,5 +1,6 @@
 from app.agents.specialists import (
     CalendarAgent,
+    ComplianceAgent,
     FinanceAgent,
     GeneralAgent,
     PlannerAgent,
@@ -30,6 +31,7 @@ class Coordinator:
             AgentType.calendar: CalendarAgent(brain=self.brain),
             AgentType.finance: FinanceAgent(brain=self.brain),
             AgentType.wellness: WellnessAgent(brain=self.brain),
+            AgentType.compliance: ComplianceAgent(brain=self.brain),
             AgentType.general: GeneralAgent(brain=self.brain),
         }
 
@@ -44,6 +46,21 @@ class Coordinator:
             return AgentType.finance
         if any(word in text for word in ["health", "sleep", "exercise", "stress", "wellness"]):
             return AgentType.wellness
+        if any(
+            word in text
+            for word in [
+                "compliance",
+                "regulation",
+                "regulatory",
+                "legal",
+                "import",
+                "export",
+                "customs",
+                "sanction",
+                "trade law",
+            ]
+        ):
+            return AgentType.compliance
         return AgentType.general
 
     def run(self, user_id: str, message: str, context: dict) -> tuple[AgentType, AgentResult]:

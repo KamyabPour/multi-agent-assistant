@@ -492,7 +492,14 @@ class Installer:
             "email": profiles["assistant"].get("email"),
             "version": "0.1.0",
             "skills": profiles["assistant"].get("skills", []),
-            "supported_agents": ["planner", "calendar", "finance", "wellness", "general"],
+            "supported_agents": [
+                "planner",
+                "calendar",
+                "finance",
+                "wellness",
+                "compliance",
+                "general",
+            ],
             "instructions": "Be concise and actionable.",
             "guardrails": [],
         }

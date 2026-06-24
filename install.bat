@@ -224,7 +224,7 @@ if not exist data mkdir data
     echo     {"skill": "planning", "level": "advanced", "description": "Goal setting and roadmap creation"},
     echo     {"skill": "scheduling", "level": "advanced", "description": "Calendar management"}
     echo   ],
-    echo   "supported_agents": ["planner", "calendar", "finance", "wellness", "general"],
+    echo   "supported_agents": ["planner", "calendar", "finance", "wellness", "compliance", "general"],
     echo   "instructions": "Be concise and actionable.",
     echo   "guardrails": []
     echo }

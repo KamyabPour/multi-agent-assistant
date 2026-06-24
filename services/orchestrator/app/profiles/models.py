@@ -15,7 +15,14 @@ class AssistantProfile(BaseModel):
     version: str = "0.1.0"
     skills: list[SkillSet] = Field(default_factory=list)
     supported_agents: list[str] = Field(
-        default_factory=lambda: ["planner", "calendar", "finance", "wellness", "general"]
+        default_factory=lambda: [
+            "planner",
+            "calendar",
+            "finance",
+            "wellness",
+            "compliance",
+            "general",
+        ]
     )
     instructions: str | None = None
     guardrails: list[str] = Field(default_factory=list)

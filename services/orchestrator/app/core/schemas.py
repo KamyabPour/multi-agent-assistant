@@ -8,6 +8,7 @@ class AgentType(str, Enum):
     calendar = "calendar"
     finance = "finance"
     wellness = "wellness"
+    compliance = "compliance"
     general = "general"
 
 
