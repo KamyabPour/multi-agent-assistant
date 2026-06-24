@@ -177,21 +177,20 @@ class Installer:
             return False
 
     def setup_github_account(self):
-        """Create brand-new assistant GitHub account with browser automation."""
-        self.print_step(4, "New Assistant GitHub Account")
+        """Create brand-new assistant GitHub account, reusing Gmail address."""
+        self.print_step(5, "New Assistant GitHub Account (SECOND) — uses Gmail address")
 
         print("A brand-new GitHub account is needed for the assistant.")
         print("This must NOT be your personal account.")
+        print(f"We'll use the Gmail address already collected: {self.config.get('ASSISTANT_EMAIL_FROM', 'aiassistance@gmail.com')}")
         print()
 
         github_username = self.prompt_input(
             "Choose a GitHub username for the assistant",
             default="ai-assistant-bot",
         )
-        github_email = self.prompt_input(
-            "Assistant email for GitHub",
-            default="aiassistance@gmail.com",
-        )
+        # Reuse the Gmail address already collected in setup_gmail
+        github_email = self.config.get("ASSISTANT_EMAIL_FROM", "aiassistance@gmail.com")
 
         self.config["ASSISTANT_GITHUB_NAME"] = github_username
 
@@ -216,7 +215,7 @@ class Installer:
 
     def generate_github_token(self):
         """Generate GitHub personal access token with browser automation."""
-        self.print_step(5, "GitHub Personal Access Token")
+        self.print_step(6, "GitHub Personal Access Token")
 
         print("I'll open GitHub settings in your browser to generate a token.")
         print()
@@ -283,8 +282,8 @@ class Installer:
         return False
 
     def setup_gmail(self):
-        """Guide user through required Gmail setup with browser automation."""
-        self.print_step(7, "Gmail Setup (Required)")
+        """Create brand-new assistant Gmail account with browser automation."""
+        self.print_step(4, "Gmail Setup (FIRST) — assistant identity")
 
         print("Gmail is required for assistant email notifications and reminders.")
         print()
@@ -329,7 +328,7 @@ class Installer:
 
     def setup_assistant_profile(self):
         """Create assistant profile only."""
-        self.print_step(8, "Create Assistant Profile")
+        self.print_step(7, "Create Assistant Profile")
 
         print("The assistant profile stores app identity and skills.")
         print()
@@ -410,10 +409,10 @@ class Installer:
         self.print_header("MULTI-AGENT-ASSISTANT INSTALLATION")
 
         print("This script will set up your assistant with:")
-        print("  ✓ GitHub account & token")
-        print("  ✓ GitHub Models API (AI brain)")
-        print("  ✓ Gmail integration (required)")
-        print("  ✓ Assistant profile configuration")
+        print("  Step 4 ✓ Gmail account (FIRST — used as identity for GitHub)")
+        print("  Step 5 ✓ GitHub account (SECOND — uses same Gmail)")
+        print("  Step 6 ✓ GitHub token (AI brain access)")
+        print("  Step 7 ✓ Assistant profile")
         print()
 
         if not self.check_python_version():
@@ -426,19 +425,17 @@ class Installer:
         if not self.setup_backend_dependencies():
             return False
 
+        # Gmail FIRST — assistant needs Gmail before GitHub (same email reused)
+        if not self.setup_gmail():
+            return False
+
+        # GitHub SECOND — uses the Gmail address already collected
         if not self.setup_github_account():
             return False
 
         token = self.generate_github_token()
         if not token:
             print(Colors.error("GitHub token is required"))
-            return False
-
-        # Uncomment when backend can be started
-        # if not self.test_github_models():
-        #     print(Colors.warning("GitHub Models connection test failed"))
-
-        if not self.setup_gmail():
             return False
         if not self.setup_assistant_profile():
             return False
@@ -457,26 +454,24 @@ class Installer:
 
         from pathlib import Path
         cred_path = Path.home() / ".assistant" / "credentials"
-        print("Configuration saved to:")
-        print(f"  • {cred_path}  (PRIVATE - token + gmail password, outside repo)")
-        print(f"  • .env                      (gitignored - loaded by app)")
-        print(f"  • data/assistant_profile.json (gitignored - non-sensitive profile)")
+        print("\n✓ Install is done ONCE. To run the app each time:")
         print()
-
-        print("Next steps:")
-        print("  1. Start backend:")
-        print(f"     cd {self.backend_dir}")
-        print("     python -m uvicorn app.main:app --reload")
+        print("  Terminal 1 — Backend:")
+        print(f"    cd {self.backend_dir}")
+        print("    python -m uvicorn app.main:app --reload")
         print()
-        print("  2. In another terminal, start web frontend:")
-        print("     cd apps/web")
-        print("     npm run dev")
+        print("  Terminal 2 — Web frontend:")
+        print("    cd apps/web")
+        print("    npm install   # first time only")
+        print("    npm run dev")
         print()
-        print("  3. Visit http://localhost:3000")
+        print("  Then open: http://localhost:3000")
         print()
-
-        print("Test the setup:")
-        print("  python test_quick.py --verbose")
+        print("  Quick health check:")
+        print("    python test_quick.py")
+        print()
+        print("Credentials stored at:")
+        print(f"  {cred_path}  (PRIVATE — outside repo, never published)")
         print()
 
         return True

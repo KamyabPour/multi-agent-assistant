@@ -77,38 +77,73 @@ echo Python dependencies installed.
 cd ..\..
 echo.
 
-REM GitHub setup
-echo [4] GitHub Account Setup (Browser Automated)
+REM STEP 4 - Gmail first (needed before GitHub so same email is reused)
+echo [4] Gmail Setup (Browser Automated) - FIRST: assistant needs Gmail before GitHub
 echo.
-echo GitHub is required for GitHub Models API ^(assistant brain^).
-echo This installer is configured for a BRAND NEW assistant GitHub account.
+echo Gmail is the assistant identity. Create a BRAND NEW account ^(not your personal one^).
 echo.
-set /p ASSISTANT_GITHUB_NAME="Boss input - new assistant GitHub username: "
+set GMAIL_ENABLED=true
+set GMAIL_FROM=
+set GMAIL_PASSWORD=
+
+set /p GMAIL_FROM="Boss: choose assistant Gmail address ^(default: aiassistance@gmail.com^): "
+if "%GMAIL_FROM%"=="" set "GMAIL_FROM=aiassistance@gmail.com"
+
+echo.
+echo Opening Gmail signup in your browser...
+start https://accounts.google.com/signup/v2/webcreateaccount
+echo Browser opened.
+echo.
+echo IMPORTANT:
+echo   1. Sign out of personal Gmail first.
+echo   2. Create a NEW account: %GMAIL_FROM%
+echo   3. Complete phone/email verification before continuing.
+echo.
+pause
+
+echo.
+echo Opening Gmail app passwords in your browser...
+start https://myaccount.google.com/apppasswords
+echo Browser opened.
+echo.
+echo Please complete these steps in the browser:
+echo   1. Select 'Mail' from the 'Select app' dropdown
+echo   2. Select 'Windows Computer' from the 'Select device' dropdown
+echo   3. Click 'Generate'
+echo   4. Copy the 16-character password shown
+echo.
+set /p GMAIL_PASSWORD="Paste the app-specific password: "
+echo.
+
+REM STEP 5 - GitHub second (uses same email as Gmail)
+echo [5] GitHub Account Setup (Browser Automated) - SECOND: uses assistant Gmail
+echo.
+echo GitHub is needed for GitHub Models API ^(assistant brain^).
+echo Use the SAME email as Gmail: %GMAIL_FROM%
+echo.
+set /p ASSISTANT_GITHUB_NAME="Boss: choose assistant GitHub username: "
 if "%ASSISTANT_GITHUB_NAME%"=="" (
-    echo ERROR: assistant GitHub username is required
+    echo ERROR: GitHub username is required
     pause
     exit /b 1
 )
 
-set /p signup_email="Boss input - assistant email for GitHub ^(default: aiassistance@gmail.com^): "
-if "%signup_email%"=="" set "signup_email=aiassistance@gmail.com"
-
 echo.
 echo Opening GitHub signup in your browser...
-start https://github.com/signup?email=!signup_email!^&user_login=!ASSISTANT_GITHUB_NAME!
-echo Browser opened to GitHub signup.
+start https://github.com/signup?email=!GMAIL_FROM!^&user_login=!ASSISTANT_GITHUB_NAME!
+echo Browser opened.
 echo.
 echo IMPORTANT:
-echo   1. If browser is logged into a personal account, sign out first.
-echo   2. Create a NEW account for assistant username: !ASSISTANT_GITHUB_NAME!
-echo   3. Use assistant email: !signup_email!
+echo   1. Sign out of personal GitHub first.
+echo   2. Email is pre-filled: !GMAIL_FROM!
+echo   3. Username: !ASSISTANT_GITHUB_NAME!
 echo   4. Verify email and finish signup before continuing.
 echo.
 pause
 
-REM GitHub token
+REM STEP 6 - GitHub token
 echo.
-echo [5] GitHub Personal Access Token (Browser Automated)
+echo [6] GitHub Personal Access Token (Browser Automated)
 echo.
 echo Opening GitHub token creation page in your browser...
 start https://github.com/settings/tokens/new
@@ -130,46 +165,8 @@ if "%GITHUB_TOKEN%"=="" (
 )
 echo.
 
-REM Gmail setup
-echo [6] Gmail Setup (Browser Automated, Required)
-echo.
-set GMAIL_ENABLED=true
-set GMAIL_FROM=
-set GMAIL_PASSWORD=
-
-echo This installer is configured for a BRAND NEW assistant Gmail account.
-set /p GMAIL_FROM="Boss input - new assistant Gmail address ^(default: aiassistance@gmail.com^): "
-if "%GMAIL_FROM%"=="" set "GMAIL_FROM=aiassistance@gmail.com"
-
-echo.
-echo Opening Gmail signup in your browser...
-start https://accounts.google.com/signup/v2/webcreateaccount
-echo Browser opened to Gmail signup.
-echo.
-echo IMPORTANT:
-echo   1. If browser is logged into personal Gmail, sign out first.
-echo   2. Create a NEW Gmail account using: %GMAIL_FROM%
-echo   3. Complete phone/email verification before continuing.
-echo.
-pause
-
-echo.
-echo.
-echo Opening Gmail app passwords in your browser...
-start https://myaccount.google.com/apppasswords
-echo Browser opened.
-echo.
-echo Please complete these steps in the browser:
-echo   1. Select 'Mail' from the 'Select app' dropdown
-echo   2. Select 'Windows Computer' from the 'Select device' dropdown
-echo   3. Click 'Generate'
-echo   4. Copy the 16-character password shown
-echo.
-set /p GMAIL_PASSWORD="Paste the app-specific password: "
-echo.
-
 REM Profiles
-echo [7] Create Assistant Profile
+echo [7] Create Assistant Profile (non-sensitive - name and skills only)
 echo.
 echo Assistant Profile:
 set /p ASSISTANT_EMAIL="Assistant email for profile ^(default: %GMAIL_FROM%^): "
@@ -248,25 +245,25 @@ echo   * %USERPROFILE%\.assistant\credentials  ^(PRIVATE - token + gmail passwor
 echo   * .env                                 ^(gitignored - loaded by app^)
 echo   * data/assistant_profile.json          ^(gitignored - non-sensitive profile^)
 echo.
-echo Next steps:
+echo HOW TO RUN THE APPLICATION
+echo ===========================
 echo.
-echo 1. Start the backend:
+echo Install is done ONCE. To run the app each time:
+echo.
+echo Terminal 1 - Backend:
 echo    cd services\orchestrator
 echo    python -m uvicorn app.main:app --reload
 echo.
-echo 2. In another terminal, start the web frontend:
+echo Terminal 2 - Web frontend:
 echo    cd apps\web
-echo    npm install
+echo    npm install  ^(first time only^)
 echo    npm run dev
 echo.
-echo 3. Visit http://localhost:3000
+echo Then open: http://localhost:3000
 echo.
-echo Test the setup:
-echo    python test_quick.py --verbose
+echo Quick health check:
+echo    python test_quick.py
 echo.
-echo Documentation:
-echo    * INSTALLATION.md - Setup guide
-echo    * docs/TESTING.md - Testing reference
-echo    * docs/github_models_setup.md - GitHub Models details
+echo Credentials are stored at: %USERPROFILE%\.assistant\credentials
 echo.
 pause
