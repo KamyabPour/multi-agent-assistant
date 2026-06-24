@@ -26,12 +26,30 @@ multi-agent-assistant/
 
 ## Quick Start
 
-## 0) Gmail setup for assistant identity
+⚡ **Interactive Installation** (Recommended - 5 minutes)
 
-Before running apps, configure a dedicated assistant Gmail account and app password.
+```bash
+# macOS/Linux
+python install.py
 
-- Setup guide: docs/gmail_setup.md
-- This is required for assistant email features and notification workflows.
+# Windows
+install.bat
+```
+
+The installer will guide you through:
+- ✓ GitHub account & token setup
+- ✓ GitHub Models API (AI brain) configuration
+- ✓ Gmail integration (optional)
+- ✓ Profile creation (assistant + your goals/constraints)
+- ✓ Testing & validation
+
+👉 **[Read QUICKSTART.md](QUICKSTART.md)** for detailed walkthrough
+
+---
+
+## Manual Setup
+
+For experienced users, follow [INSTALLATION.md](INSTALLATION.md).
 
 ## 1) Backend
 
@@ -48,9 +66,6 @@ Health check:
 
 Chat endpoint:
 - POST http://localhost:8000/api/v1/chat
-
-Email integration test endpoint:
-- POST http://localhost:8000/api/v1/email/send-test
 
 Example body:
 ```json
