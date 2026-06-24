@@ -24,4 +24,5 @@
 - Add memory store (Redis or Postgres)
 - Add auth (Clerk/Auth0/Cognito)
 - Add task tools (calendar API, notes, reminders)
+- Add Gmail tools (send reminders, summaries, and escalation emails)
 - Add observability (OpenTelemetry + Grafana)

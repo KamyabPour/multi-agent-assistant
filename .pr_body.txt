@@ -1,0 +1,47 @@
+## Summary
+
+The assistant now has an intelligent brain powered by GitHub Models API for real AI-driven responses.
+
+## Key Changes
+
+- **GitHub Models Integration**: GitHubModelsClient calls gpt-4o-mini/claude/llama endpoints
+- **Specialist Agents Enhanced**: Planner, Calendar, Finance, Wellness agents now use brain for responses instead of placeholders
+- **Profile System**: AssistantProfile (skills, email) and BossProfile (user context, goals, constraints)
+- **Token Optimization**: Profile summaries reduce context size for cheaper LLM calls
+- **API Endpoints**: Profile management (GET/POST), models test connection
+
+## Files Changed
+
+- New: integrations/github_models.py, profiles/{models,store}.py
+- Modified: agents/{base,specialists}.py, core/{config,coordinator}.py, api/routes.py
+- Docs: INSTALLATION.md, docs/github_models_setup.md, docs/profiles_and_skills.md
+
+## Testing
+
+```bash
+# Test GitHub connection
+curl -X POST http://localhost:8000/api/v1/models/test-connection
+
+# Get assistant profile
+curl http://localhost:8000/api/v1/profiles/assistant
+
+# Create user (boss) profile
+curl -X POST http://localhost:8000/api/v1/profiles/boss/user123 \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "Najmeh", "goals": ["Ship system", "Rest more"]}'
+```
+
+## Installation
+
+See [INSTALLATION.md](INSTALLATION.md) for complete setup including:
+1. GitHub account & token generation
+2. GitHub Models configuration  
+3. Profile setup
+4. Testing endpoints
+
+## Why GitHub Models?
+
+- Free tier with multiple models (gpt-4o-mini, claude, llama)
+- Direct API access without subscriptions
+- Natural integration with GitHub-hosted development workflow
+- Perfect for development and testing

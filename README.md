@@ -26,6 +26,31 @@ multi-agent-assistant/
 
 ## Quick Start
 
+⚡ **Interactive Installation** (Recommended - 5 minutes)
+
+```bash
+# macOS/Linux
+python install.py
+
+# Windows
+install.bat
+```
+
+The installer will guide you through:
+- ✓ GitHub account & token setup
+- ✓ GitHub Models API (AI brain) configuration
+- ✓ Gmail integration (optional)
+- ✓ Profile creation (assistant + your goals/constraints)
+- ✓ Testing & validation
+
+👉 **[Read QUICKSTART.md](QUICKSTART.md)** for detailed walkthrough
+
+---
+
+## Manual Setup
+
+For experienced users, follow [INSTALLATION.md](INSTALLATION.md).
+
 ## 1) Backend
 
 ```powershell
