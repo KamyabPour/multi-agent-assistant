@@ -7,26 +7,20 @@ This script guides users through the complete setup:
 2. Backend dependencies
 3. GitHub account & personal access token
 4. GitHub Models API configuration
-5. Gmail account setup (optional)
-6. Profile creation (assistant + boss)
+5. Gmail account setup (required)
+6. Assistant profile creation
 7. Testing & validation
 
 Usage:
     python install.py
-    python install.py --skip-github-models  # Skip GitHub Models setup
-    python install.py --skip-gmail          # Skip Gmail setup
 """
 
-import os
 import sys
 import json
 import platform
 import subprocess
 import webbrowser
-import time
 from pathlib import Path
-from typing import Optional, Dict
-import re
 
 
 class Colors:
@@ -156,15 +150,16 @@ class Installer:
         """Install Python dependencies."""
         self.print_step(3, "Install Backend Dependencies")
 
-        if not (self.backend_dir / "requirements.txt").exists():
-            print(Colors.error("requirements.txt not found"))
+        if not (self.backend_dir / "pyproject.toml").exists():
+            print(Colors.error("services/orchestrator/pyproject.toml not found"))
             return False
 
         print("Installing Python dependencies...")
         print("  (including playwright for browser automation)")
         try:
+            # Install backend from pyproject in editable mode with dev extras.
             subprocess.run(
-                ["pip", "install", "-r", "requirements.txt"],
+                ["pip", "install", "-e", ".[dev]"],
                 cwd=self.backend_dir,
                 check=True,
                 capture_output=True,
@@ -182,43 +177,41 @@ class Installer:
             return False
 
     def setup_github_account(self):
-        """Guide user through GitHub account setup with browser automation."""
-        self.print_step(4, "GitHub Account Setup")
+        """Create brand-new assistant GitHub account with browser automation."""
+        self.print_step(4, "New Assistant GitHub Account")
 
-        print("GitHub is needed for:")
-        print("  • GitHub Models API (free LLM brain for your assistant)")
-        print("  • Personal access token for authentication")
+        print("A brand-new GitHub account is needed for the assistant.")
+        print("This must NOT be your personal account.")
         print()
 
-        # Check if user has account
-        has_account = self.prompt_yes_no("Do you have a GitHub account?")
-        
-        if not has_account:
-            print()
-            print(Colors.info("Opening GitHub signup in browser..."))
-            print("I'll guide you through account creation.")
-            print()
-            
-            # Get email for signup
-            email = self.prompt_input("What email should we use for GitHub?")
-            
-            # Open GitHub signup with email pre-filled
-            signup_url = f"https://github.com/signup?email={email}"
-            webbrowser.open(signup_url)
-            
-            print(Colors.success("Browser opened to GitHub signup"))
-            print()
-            print("Please complete these steps in the browser:")
-            print("  1. Enter your email (already filled: " + email + ")")
-            print("  2. Create a strong password")
-            print("  3. Enter a username")
-            print("  4. Verify your email address")
-            print("  5. Complete any security challenges")
-            print()
-            
-            input(Colors.BOLD + "Press Enter once you've verified your email address..." + Colors.END)
-            print()
-        
+        github_username = self.prompt_input(
+            "Choose a GitHub username for the assistant",
+            default="ai-assistant-bot",
+        )
+        github_email = self.prompt_input(
+            "Assistant email for GitHub",
+            default="aiassistance@gmail.com",
+        )
+
+        self.config["ASSISTANT_GITHUB_NAME"] = github_username
+
+        print()
+        print(Colors.info("Opening GitHub signup in browser — sign out of personal account first!"))
+        signup_url = f"https://github.com/signup?email={github_email}"
+        webbrowser.open(signup_url)
+
+        print(Colors.success("Browser opened to GitHub signup"))
+        print()
+        print("Please complete these steps:")
+        print(f"  1. Email: {github_email}  (pre-filled)")
+        print(f"  2. Username: {github_username}")
+        print("  3. Create a strong password")
+        print("  4. Verify your email address")
+        print()
+
+        input(Colors.BOLD + "Press Enter once email is verified and account is ready..." + Colors.END)
+        print()
+
         return True
 
     def generate_github_token(self):
@@ -290,45 +283,31 @@ class Installer:
         return False
 
     def setup_gmail(self):
-        """Guide user through Gmail setup with browser automation."""
-        self.print_step(7, "Gmail Setup (Optional)")
+        """Guide user through required Gmail setup with browser automation."""
+        self.print_step(7, "Gmail Setup (Required)")
 
-        print("Gmail is used for email notifications and reminders.")
-        print("This is optional but recommended.")
+        print("Gmail is required for assistant email notifications and reminders.")
         print()
 
-        if not self.prompt_yes_no("Do you want to set up Gmail integration?"):
-            print(Colors.info("Skipping Gmail setup\n"))
-            self.config["ASSISTANT_EMAIL_ENABLED"] = "false"
-            return True
+        gmail_address = self.prompt_input(
+            "New assistant Gmail address",
+            default="aiassistance@gmail.com",
+        )
 
-        # Check if user has account
-        has_gmail = self.prompt_yes_no("Do you have a Gmail account?")
-        
-        email = None
-        if not has_gmail:
-            print()
-            print(Colors.info("Opening Gmail signup in browser..."))
-            # Open Gmail signup
-            webbrowser.open("https://accounts.google.com/signup/v2/webcreateaccount")
-            
-            print(Colors.success("Browser opened to Gmail signup"))
-            print()
-            print("Please create a Gmail account in the browser.")
-            print()
-            input(Colors.BOLD + "Press Enter once you've created your Gmail account..." + Colors.END)
-            print()
+        print()
+        print(Colors.info("Opening Gmail signup — sign out of personal Gmail first!"))
+        webbrowser.open("https://accounts.google.com/signup/v2/webcreateaccount")
+        print(Colors.success("Browser opened to Gmail signup"))
+        print()
+        print(f"Please create a NEW Gmail account: {gmail_address}")
+        print("Complete phone/email verification before continuing.")
+        print()
+        input(Colors.BOLD + "Press Enter once Gmail account is ready..." + Colors.END)
+        print()
 
-        # Get email
-        email = self.prompt_input("Enter your Gmail address")
-        
-        print()
-        print(Colors.info("Opening Gmail security settings in browser..."))
-        print()
-        
-        # Open Gmail app passwords page
+        print(Colors.info("Opening Gmail app passwords..."))
         webbrowser.open("https://myaccount.google.com/apppasswords")
-        
+
         print(Colors.success("Browser opened to Gmail app passwords"))
         print()
         print("Please complete these steps in the browser:")
@@ -337,87 +316,69 @@ class Installer:
         print("  3. Click 'Generate'")
         print("  4. Copy the 16-character password shown")
         print()
-        
+
         app_password = self.prompt_input(Colors.BOLD + "Paste the app-specific password here" + Colors.END)
 
         self.config["ASSISTANT_EMAIL_ENABLED"] = "true"
-        self.config["ASSISTANT_EMAIL_FROM"] = email
+        self.config["ASSISTANT_EMAIL_FROM"] = gmail_address
         self.config["ASSISTANT_EMAIL_APP_PASSWORD"] = app_password
 
         print()
         print(Colors.success("Gmail configured\n"))
         return True
 
-    def setup_profiles(self):
-        """Create assistant and boss profiles."""
-        self.print_step(8, "Create Assistant Profiles")
+    def setup_assistant_profile(self):
+        """Create assistant profile only."""
+        self.print_step(8, "Create Assistant Profile")
 
-        print("The assistant needs to know:")
-        print("  • Its own skills (planning, scheduling, etc.)")
-        print("  • Your (the boss) goals and constraints")
+        print("The assistant profile stores app identity and skills.")
         print()
 
-        # Assistant profile
         print(Colors.BOLD + "Assistant Profile:" + Colors.END)
-        assistant_email = self.prompt_input("Assistant email", default="assistant@example.com")
+        assistant_email = self.prompt_input(
+            "Assistant email",
+            default=self.config.get("ASSISTANT_EMAIL_FROM", "aiassistance@gmail.com"),
+        )
+        assistant_name = self.prompt_input("Assistant name", default="multi-agent-assistant")
         assistant_skills = [
             {"skill": "planning", "level": "advanced", "description": "Goal setting and roadmap creation"},
             {"skill": "scheduling", "level": "advanced", "description": "Calendar management"},
         ]
 
-        # Boss profile
-        print()
-        print(Colors.BOLD + "Boss (Your) Profile:" + Colors.END)
-        boss_name = self.prompt_input("Your name", default="User")
-        
-        # Use Gmail email if available, otherwise default
-        gmail_email = self.config.get("ASSISTANT_EMAIL_FROM", "")
-        default_email = gmail_email if gmail_email else "user@example.com"
-        boss_email = self.prompt_input("Your email", default=default_email)
-        
-        boss_timezone = self.prompt_input(
-            "Your timezone",
-            default="UTC",
-            required=False,
-        )
-
-        print()
-        print("Enter your goals (one per line, empty line to finish):")
-        goals = []
-        for i in range(1, 4):
-            goal = self.prompt_input(f"  Goal {i}", required=False)
-            if goal:
-                goals.append(goal)
-            else:
-                break
-
-        print()
-        print("Enter your constraints (one per line, empty line to finish):")
-        constraints = []
-        for i in range(1, 4):
-            constraint = self.prompt_input(f"  Constraint {i}", required=False)
-            if constraint:
-                constraints.append(constraint)
-            else:
-                break
-
         self.config["PROFILES"] = {
             "assistant": {
+                "assistant_name": assistant_name,
                 "email": assistant_email,
                 "skills": assistant_skills,
-            },
-            "boss": {
-                "name": boss_name,
-                "email": boss_email,
-                "timezone": boss_timezone or "UTC",
-                "goals": goals,
-                "constraints": constraints,
-            },
+            }
         }
 
         print()
-        print(Colors.success(f"Profiles created for {boss_name}\n"))
+        print(Colors.success("Assistant profile created\n"))
         return True
+
+    def _save_credentials(self):
+        """Save sensitive credentials to ~/.assistant/credentials outside the repo."""
+        from pathlib import Path
+        cred_dir = Path.home() / ".assistant"
+        cred_dir.mkdir(exist_ok=True)
+        cred_file = cred_dir / "credentials"
+        lines = [
+            "# Assistant credentials - DO NOT SHARE OR COMMIT",
+            f"# Stored outside the repo at {cred_file}",
+            f"GITHUB_TOKEN={self.config.get('GITHUB_TOKEN', '')}",
+            f"GITHUB_USERNAME={self.config.get('ASSISTANT_GITHUB_NAME', '')}",
+            f"GMAIL_ADDRESS={self.config.get('ASSISTANT_EMAIL_FROM', '')}",
+            f"GMAIL_APP_PASSWORD={self.config.get('ASSISTANT_EMAIL_APP_PASSWORD', '')}",
+        ]
+        with open(cred_file, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        # Restrict file permissions on non-Windows
+        import stat
+        import platform
+        if platform.system() != "Windows":
+            cred_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600
+        print(Colors.success(f"Credentials saved to {cred_file} (outside repo, never published)"))
 
     def _write_env_file(self, custom_config=None):
         """Write configuration to .env file."""
@@ -451,8 +412,8 @@ class Installer:
         print("This script will set up your assistant with:")
         print("  ✓ GitHub account & token")
         print("  ✓ GitHub Models API (AI brain)")
-        print("  ✓ Gmail integration (optional)")
-        print("  ✓ Profile configuration")
+        print("  ✓ Gmail integration (required)")
+        print("  ✓ Assistant profile configuration")
         print()
 
         if not self.check_python_version():
@@ -477,11 +438,16 @@ class Installer:
         # if not self.test_github_models():
         #     print(Colors.warning("GitHub Models connection test failed"))
 
-        self.setup_gmail()
-        self.setup_profiles()
+        if not self.setup_gmail():
+            return False
+        if not self.setup_assistant_profile():
+            return False
 
         # Write .env file
         self._write_env_file()
+
+        # Save sensitive credentials to user home (outside repo)
+        self._save_credentials()
 
         # Save profiles to disk
         self._save_profiles()
@@ -489,10 +455,12 @@ class Installer:
         # Summary
         self.print_header("INSTALLATION COMPLETE ✓")
 
+        from pathlib import Path
+        cred_path = Path.home() / ".assistant" / "credentials"
         print("Configuration saved to:")
-        print(f"  • .env (environment variables)")
-        print(f"  • data/assistant_profile.json")
-        print(f"  • data/boss_profile.json")
+        print(f"  • {cred_path}  (PRIVATE - token + gmail password, outside repo)")
+        print(f"  • .env                      (gitignored - loaded by app)")
+        print(f"  • data/assistant_profile.json (gitignored - non-sensitive profile)")
         print()
 
         print("Next steps:")
@@ -514,7 +482,7 @@ class Installer:
         return True
 
     def _save_profiles(self):
-        """Save assistant and boss profiles to disk."""
+        """Save assistant profile to disk."""
         data_dir = self.project_root / "data"
         data_dir.mkdir(exist_ok=True)
 
@@ -525,7 +493,7 @@ class Installer:
 
         # Assistant profile
         assistant_profile = {
-            "assistant_name": "multi-agent-assistant",
+            "assistant_name": profiles["assistant"].get("assistant_name", "multi-agent-assistant"),
             "email": profiles["assistant"].get("email"),
             "version": "0.1.0",
             "skills": profiles["assistant"].get("skills", []),
@@ -537,23 +505,7 @@ class Installer:
         with open(data_dir / "assistant_profile.json", "w") as f:
             json.dump(assistant_profile, f, indent=2)
 
-        # Boss profile (using name as boss_id)
-        boss_id = profiles["boss"].get("name", "user").lower().replace(" ", "_")
-        boss_profile = {
-            "boss_id": boss_id,
-            "name": profiles["boss"].get("name"),
-            "email": profiles["boss"].get("email"),
-            "timezone": profiles["boss"].get("timezone", "UTC"),
-            "goals": profiles["boss"].get("goals", []),
-            "constraints": profiles["boss"].get("constraints", []),
-            "preferences": {},
-            "summary": f"{profiles['boss'].get('name')} - initialized by installer",
-        }
-
-        with open(data_dir / "boss_profile.json", "w") as f:
-            json.dump(boss_profile, f, indent=2)
-
-        print(Colors.success("Profiles saved to data/"))
+        print(Colors.success("Assistant profile saved to data/"))
 
 
 def main():

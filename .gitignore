@@ -12,6 +12,12 @@ apps/*/node_modules/
 .env
 .env.*
 
+# Assistant runtime data (profiles, credentials) — never commit
+data/
+
+# User-space credential store
+.assistant/
+
 # OS/editor
 .DS_Store
 .vscode/*.code-workspace
